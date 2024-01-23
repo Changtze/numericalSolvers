@@ -5,7 +5,6 @@
 #include "vector.h"
 #include <iostream>
 #include <iomanip>
-#include <cmath>
 
 class Vector; // forward declaration of Vector class for matrix-vector multiplication
 class Matrix { 
@@ -72,22 +71,22 @@ public:
 	
 };
 
-void Matrix::set(const int row, const int column, const double value) {
+inline void Matrix::set(const int row, const int column, const double value) {
 	*(matrixElement + row * getSize(1) + column) = value;
 }
 
-double Matrix::operator() (int r, int c) const {
+inline double Matrix::operator() (int r, int c) const {
 
 	if (r < rows && c < columns) {
 		return *(matrixElement + r * columns + c);
 	}
 	else {
 		cout << "Element doesn't exist." << endl;
-		exit(EXIT_FAILURE);
+		quick_exit(EXIT_FAILURE);
 	}
 }
 
-int Matrix::getSize(int dimension) const {
+inline int Matrix::getSize(int dimension) const {
 	switch (dimension) {
 	default:
 		cout << "Dimension not/incorrectly specified. Number of rows returned." << endl;
@@ -100,7 +99,7 @@ int Matrix::getSize(int dimension) const {
 	}
 }
 
-Matrix operator* (const Matrix& M, const double multiplier) {
+inline Matrix operator* (const Matrix& M, const double multiplier) {
 
 	Matrix product(M);
 
@@ -110,7 +109,7 @@ Matrix operator* (const Matrix& M, const double multiplier) {
 	return product;
 }
 
-Vector operator* (const Matrix& M, const Vector& V) // matrix of size N x M, vector of size M x 1 
+inline Vector operator* (const Matrix& M, const Vector& V) // matrix of size N x M, vector of size M x 1 
 {
 
 	Vector pVec(V.vecElementCount); // product vector with size M x 1
@@ -129,7 +128,7 @@ Vector operator* (const Matrix& M, const Vector& V) // matrix of size N x M, vec
 	return pVec;
 }
 
-ostream& operator<< (ostream& out, const Matrix& a) { // overload for operator display
+inline ostream& operator<< (ostream& out, const Matrix& a) { // overload for operator display
 	int i{ 0 };
 
 	for (int j{ 0 }; j < a.matrixElementCount; j++) {
@@ -148,28 +147,37 @@ ostream& operator<< (ostream& out, const Matrix& a) { // overload for operator d
 	return out;
 }
 
-Matrix operator+ (const Matrix& a, const Matrix& b) {
+inline Matrix operator+ (const Matrix& a, const Matrix& b) {
 
 	int r{ a.rows };
 	int c{ a.columns };
 
-	Matrix C(r, c);
-	if (a.rows == b.rows && a.columns == b.columns) {
-		for (int i{ 0 }; i < r; i++) {
-			for (int j{ 0 }; j < c; j++) {
-				*(C.matrixElement + i * c + j) = a(i, j) + b(i, j);
+	Matrix C(r, c); // matrix sum
+
+		if (a.rows == b.rows && a.columns == b.columns) {
+			for (int i{ 0 }; i < r; i++) {
+				for (int j{ 0 }; j < c; j++) {
+					*(C.matrixElement + i * c + j) = a(i, j) + b(i, j);
+				}
 			}
+		} else
+		{
+			throw logic_error("Incompatible dimensions for matrix addition");
 		}
-	}
+
 	return C;
 }
 
-Matrix operator- (const Matrix& a, const Matrix& b) {
+inline Matrix operator- (const Matrix& a, const Matrix& b) {
 	return a + (b * -1);
 }
 
-void Matrix::diagonal(double x, const int di, bool validity) // valid for square matrices (rows = columns)
+inline void Matrix::diagonal(double x, const int di, bool validity) // valid for square matrices (rows = columns)
 {
+	// populates the diagonal di with value x.
+	/* di < 0 populate the di'th diagonal below the leading diagonal (di = 0)
+	 * vice versa for di > 0
+	 */
 	if (validity) {
 		if (columns != rows) {
 			throw logic_error("Must be a square matrix");
@@ -219,7 +227,7 @@ void Matrix::diagonal(double x, const int di, bool validity) // valid for square
 	}
 }
 
-void Matrix::Identity()
+inline void Matrix::Identity()
 {
 	try {
 		diagonal(1.0, 0, false);
@@ -229,19 +237,19 @@ void Matrix::Identity()
 	}
 }
 
-void Matrix::zeros()
+inline void Matrix::zeros()
 {
 	fill(0);
 }
 
-void Matrix::fill(double x) {
+inline void Matrix::fill(double x) {
 
 	for (int i{ 0 }; i < matrixElementCount; i++) {
 		*(matrixElement + i) = x;
 	}
 }
 
-void Matrix::tridiagonal(double a, double b, double c) // equivalent to a banded matrix B[a, b, c]
+inline void Matrix::tridiagonal(double a, double b, double c) // equivalent to a banded matrix B[a, b, c]
 {
 	bool isZero{ false }; // diagonal should only initially accept zero matrices
 	zeros();
@@ -261,7 +269,7 @@ void Matrix::tridiagonal(double a, double b, double c) // equivalent to a banded
 	}
 }
 
-Matrix horzCat(const Matrix& left, const Matrix& right) {
+inline Matrix horzCat(const Matrix& left, const Matrix& right) {
 
 	// size compatibility validation
 	if (left.rows != right.rows) {
@@ -269,8 +277,8 @@ Matrix horzCat(const Matrix& left, const Matrix& right) {
 	}
 
 	// dimensions of the final matrix F
-	int rowF{ left.rows };
-	int columnF{ left.columns + right.columns };
+	const int rowF{ left.rows };
+	const int columnF{ left.columns + right.columns };
 
 	Matrix F(rowF, columnF);
 
@@ -294,7 +302,7 @@ Matrix horzCat(const Matrix& left, const Matrix& right) {
 	return F;
 }
 
-Matrix vertCat(const Matrix& top, const Matrix& bottom) {
+inline Matrix vertCat(const Matrix& top, const Matrix& bottom) {
 
 	// size compatibility validation
 	if (top.columns != bottom.columns) {

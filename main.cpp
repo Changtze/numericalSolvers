@@ -3,8 +3,6 @@
 #include "vector.h" 
 #include "matrix.h" 
 #include <iostream>
-#include <utility>
-#include <vector>
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -32,7 +30,7 @@ using namespace std;
 
 // Function declarations 
 void setParameters(int& s, double& tF, double& tStep, double& k, double& d);
-void writeOutput(const Vector solution, double time, bool newFile); 
+void writeOutput(const Vector solution, double time, bool newFile);
 int getMassCount();
 
 class massSpringSystem {
@@ -47,7 +45,7 @@ public:
 	}
 
 	void rungeKutta4(const Matrix& systemMatrix, const double h,
-	Vector& X0, const double T) const; // timestep, initial condition vector, upper time bound as parameters
+		Vector& X0, const double T) const; // timestep, initial condition vector, upper time bound as parameters
 
 	void explicitEuler(const Matrix& system, const double h,
 		Vector& X0, const double T) const;
@@ -58,29 +56,33 @@ public:
 
 };
 
-Matrix massSpringSystem::systemMatrix(Vector& solutionVector, Vector& massVector) const{ 
+Matrix massSpringSystem::systemMatrix(Vector& solutionVector, Vector& massVector) const {
 
 	// See lines 12-30 for matrix formation process
 
 	setInitialState(solutionVector, massVector); // initialises the vector of initial conditions
 
-	Matrix topLeft(massCount, massCount); 
-	topLeft.zeros(); 
+	Matrix topLeft(massCount, massCount);
+	topLeft.zeros();
+
 
 	Matrix topRight(massCount, massCount);
 	topRight.Identity();
 
-	Matrix bottomLeft(massCount,  massCount);
-	bottomLeft.tridiagonal(springConstant, -2*springConstant, springConstant); // banded matrix coefficients 
+
+	Matrix bottomLeft(massCount, massCount);
+	bottomLeft.tridiagonal(springConstant, -2 * springConstant, springConstant); // banded matrix coefficients 
+
 
 	Matrix bottomRight(massCount, massCount);
-	
+
 	try {
 		bottomRight.diagonal(dampingCoefficient, 0, false); // damping terms
 	}
 	catch (const logic_error& e) {
 		cerr << e.what();
 	}
+
 
 	// dividing each row by the corresponding mass value
 	for (int r{ 0 }; r < bottomRight.getSize(0); r++) {
@@ -94,26 +96,22 @@ Matrix massSpringSystem::systemMatrix(Vector& solutionVector, Vector& massVector
 	}
 
 	// concatenating the sub-matrices
-	try {
-		Matrix systemTopHalf(horzCat(topLeft, topRight));
-		Matrix systemBottomHalf(horzCat(bottomLeft, bottomRight));
-		Matrix system(vertCat(systemTopHalf, systemBottomHalf));
 
-		return system;
-	}
-	catch (const logic_error& e) {
-		cerr << e.what();
-	}
-	
+	const Matrix systemTopHalf(horzCat(topLeft, topRight)); 
+	const Matrix systemBottomHalf(horzCat(bottomLeft, bottomRight));
+	Matrix system(vertCat(systemTopHalf, systemBottomHalf));
+
+	return system;
 }
 
-int getMassCount(){
+int getMassCount() {
 
 	ifstream parameters; parameters.open("parameters.txt", ios_base::in);
 
 	int massCount{ 0 };
-	string lineCounter; 
+	
 	if (parameters.is_open()) {
+		string lineCounter;
 		getline(parameters, lineCounter); // skip the first line
 		while (getline(parameters, lineCounter) && !lineCounter.empty()) {
 			massCount++;
@@ -126,43 +124,77 @@ int getMassCount(){
 Vector massSpringSystem::setInitialState(Vector& emptyX0, Vector& emptyMass) const {
 
 	ifstream parameters; parameters.open("parameters.txt", ios_base::in);
-
-	string Line;
+	int mCount {getMassCount()};
 
 	if (parameters.is_open()) {
 		int j{ 0 }; // initial condition vector tracking
+		
+
+		string Line;
 		getline(parameters, Line); // skip the first line
+		
+
 		while (getline(parameters, Line)) { // go through every line
+			
 			int i{ 0 }; // tracking the values on each line
+			int valueCount{ 0 }; // tracking how many values exist on a line
+
 			istringstream iss(Line);
 			string value;
-			
+
 			while (getline(iss, value, ' ')) { // space delimited
-				if (i == 0) { 
+				if (i == 0) { // 0 indicates a mass value
 					if (stod(value) < 0) {
 						cout << "Read mass is negative! Check parameters.txt." << endl;
-						exit(EXIT_FAILURE);
-					} else
+						quick_exit(EXIT_FAILURE);
+					}
+					else
 					{
 						emptyMass.set(j, stod(value));
 						i++;
+						valueCount++;
 						continue; // skip if value read is mass
 					}
-					
-				}
-				else if (i == 1) {
-					emptyX0.set(j, stod(value));
-					i++;
-				}
-				else {
-					emptyX0.set(j + massCount, stod(value));
-					j++;
 
+				}
+				else if (i == 1) { // indicates an initial displacement value
+					if (stod(value) < -(j+1.0)/(mCount+1.0) || stod(value) > (mCount + 1.0 - (j+1.0))/(mCount + 1.0))
+						// initial displacement compatibility validation
+						// on the left of the i'th mass, there are i springs of equil. length. 
+						// because of zero-index, j+1 compensates
+					{
+						cout << "Initial displacements cannot exceed solid boundaries. Check parameters file." << endl;
+						quick_exit(EXIT_FAILURE);
+					}
+					else if (stod(value) < -1.0/(mCount + 1.0) || stod(value) > 1.0/(mCount + 1.0)) // masses cannot be in front of another
+					{
+						cout << "Initial displacements cannot overlap other masses." << endl;
+						quick_exit(EXIT_FAILURE);
+					}
+					else
+					{
+						emptyX0.set(j, stod(value));
+						i++;
+						valueCount++;
+
+					}
+				}
+				else { // indicates an initial velocity value
+					if (valueCount <= 2) {
+						emptyX0.set(j + massCount, stod(value));
+						valueCount++;
+						j++;
+					}
+					else {
+						cout << "Invalid mass values. Check parameters file" << endl;
+						quick_exit(EXIT_FAILURE);
+					}
+						
+					}
+			
 				}
 
 			}
-			
-		}
 	}
 	cout << endl;
 	parameters.close();
@@ -178,23 +210,26 @@ void setParameters(int& s, double& tF, double& tStep, double& k, double& d) {
 	// taking only the first line for parameters
 	if (parameters.is_open()) { // file validity
 		parameters >> s >> tF >> tStep >> k >> d;
-		if (tF <= 0.0) {
-			throw invalid_argument("Invalid upper time bound. Check parameters file.");
+		if (tF <= 0.0 || tF <= tStep) {
+			throw invalid_argument("Upper time bound must be greater than 0 and cannot be less than time step. Check parameters file.");
 		}
 		else if (tStep <= 0.0) {
-			throw invalid_argument("Invalid time step. Check parameters file.");
+			throw invalid_argument("Time step must be greater than 0. Check parameters file.");
 		}
 		else if (k < 0 || d < 0) {
 			throw invalid_argument("Negative damping or stiffness not allowed. Check parameters file.");
 		}
+		else if (s != 1 && s!= 0)
+		{
+			throw invalid_argument("Unrecognised time integration scheme. Check parameters file.");
+		}
 	}
 }
 
-void writeOutput(const Vector solution, double time, bool newFile)
-{
-	int N{solution.getSize()};
+void writeOutput(const Vector solution, double time, bool newFile) {
+	int N{ solution.getSize() };
 
-	if (newFile){ // if no file has been made, create one 
+	if (newFile) { // if no file has been made, create one 
 		ofstream output; output.open("output.txt"); // new output file
 		output.close();
 		writeOutput(solution, time, false);
@@ -204,13 +239,13 @@ void writeOutput(const Vector solution, double time, bool newFile)
 		if (output.is_open())
 		{
 			output << time; // output time every new line
-			
-			for (int i{0}; i < N/2; i++)
+
+			for (int i{ 0 }; i < N / 2; i++)
 			{
 				// first N/2 elements of solution are the displacements of each mass
 				// last N/2 elements of the solution are the corresponding velocities 
-				
-				output << " " << solution[i] << " " << solution[i + N/2]; 
+
+				output << " " << solution[i] << " " << solution[i + N / 2];
 			}
 		}
 		output << "\n";
@@ -221,51 +256,54 @@ void writeOutput(const Vector solution, double time, bool newFile)
 void massSpringSystem::rungeKutta4(const Matrix& systemMatrix, const double h, Vector& X0, const double T) const {
 
 	double t{ 0 };
-	bool newFile {true}; // assuming no output file has been created yet
+	bool newFile{ true }; // assuming no output file has been created yet
+	const auto gridPoints{ T / h }; 
 
 	writeOutput(X0, t, newFile); // writing the initial conditions first
 	newFile = false;
 
-	while (t <= T)
+	// while loop not used; non-factors of 2 cannot be accurately represented with double precision 
+	for (int step{0}; step < gridPoints; step++)
 	{
-		t += h; // step in time
-		Vector k1(systemMatrix * X0 * h);
-		Vector k2(systemMatrix * X0 * h + k1/2);
-		Vector k3(systemMatrix * X0 * h + k2/2);
-		Vector k4(systemMatrix * X0 * h + k3);
+		t += h; // time step
 
-		X0 = X0 + k1/6 + (k2+k3)/3 + k4/6;
-		
+		Vector k1(systemMatrix * X0);
+		Vector k2(systemMatrix * (X0 + k1*h / 2.0));
+		Vector k3(systemMatrix * (X0 + k2*h / 2.0));
+		Vector k4(systemMatrix * (X0 + k3*h));
+
+		X0 = X0 + ((k1/6) + (k2 + k3)/3 + (k4/6))*h;
+
 		writeOutput(X0, t, newFile);
-		
-		
 	}
 }
 
 void massSpringSystem::explicitEuler(const Matrix& systemMatrix, const double h, Vector& X0, const double T) const {
+
 	double t{ 0 };
 	bool newFile{ true };
+	const auto gridPoints{T/h};
 
-	writeOutput(X0, t, newFile); // writing the initial conditions first
+	writeOutput(X0, t, newFile); 
 	newFile = false;
 
-	while (t <= T) {
+	for (int step{ 0 }; step < gridPoints; step++) {
 		t += h;
+		
 		X0 = X0 + systemMatrix * X0 * h;
 		writeOutput(X0, t, newFile);
-		
+
 	}
 }
 
-int main()
-{	
+int main() {
 	// Mass-spring system parameters
 	int scheme{};
 	double timeFinal{};
 	double timeStep{};
 	double springConstant{};
 	double damping{};
-	
+
 	// Assigning the global parameters
 	cout << "Assigning parameters to the system..." << endl;
 	try {
@@ -274,37 +312,47 @@ int main()
 	}
 	catch (const invalid_argument& e) {
 		cerr << e.what() << endl;
-		exit(EXIT_FAILURE);
+		quick_exit(EXIT_FAILURE);
 	}
-	
+
 	int N{ getMassCount() };
-	
-	
+
+	if (N <=0) { // system cannot be massless
+		cout << "No masses read! Check parameters file" << endl;
+		quick_exit(EXIT_FAILURE);
+	}
+
+	cout << "Number of masses: " << N << endl;
+	cout << "Damping constant: " << damping << endl;
+	cout << "Spring constant: " << springConstant << endl;
+	cout << "Final time: " << timeFinal << endl;
+	cout << "Time step: " << timeStep << endl;
+
 	// creating the system
-	cout << "Generating system..." << endl;
+
 	massSpringSystem system(N, springConstant, damping);
-	Vector solutionVector(2*N);
+	Vector solutionVector(2 * N);
 	Vector massVector(N); // used in tridiagonal matrix
 
 	// creating the system matrix
 	Matrix sysMatrix = system.systemMatrix(solutionVector, massVector);
-	cout << solutionVector << endl;
 
+	cout << "System generated." << endl;
 
-	switch (scheme){
+	switch (scheme) {
 	case 1:
 		cout << "Solving with 4th order Runge-Kutta..." << endl;
 		system.rungeKutta4(sysMatrix, timeStep, solutionVector, timeFinal);
 		cout << "Solution written successfully." << endl;
-		exit(EXIT_SUCCESS);
+		break;
 	case 0:
 		cout << "Solving with explicit Euler..." << endl;
 		system.explicitEuler(sysMatrix, timeStep, solutionVector, timeFinal);
 		cout << "Solution written successfully." << endl;
-		exit(EXIT_SUCCESS);
+		break;
 	default:
-		cout << "Time integration identifier not recognised. Check parameters file." << endl;
-		exit(EXIT_FAILURE);
+		cout << "Invalid time integration identifier. Check parameters file." << endl;
+		break;
 	}
 	return 0;
 }
